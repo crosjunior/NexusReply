@@ -1,0 +1,37 @@
+{
+  "name": "replyflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Automação de DMs e comentários do Instagram com builder de fluxos (estilo ManyChat). Next.js + Supabase + Tailwind.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build && npm run build:worker",
+    "build:worker": "esbuild scripts/worker.ts --bundle --platform=node --target=node22 --format=esm --conditions=react-server --outfile=dist/worker.mjs --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "worker": "node dist/worker.mjs",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.118.0",
+    "@xyflow/react": "^12.12.1",
+    "lucide-react": "^1.66.0",
+    "next": "^16.4.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "server-only": "^0.0.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "esbuild": "^0.28.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.5"
+  }
+}

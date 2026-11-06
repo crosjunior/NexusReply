@@ -1,0 +1,47 @@
+# ReplyFlow na VPS: app (Next.js) + worker + Caddy (HTTPS automático).
+# Supabase self-hosted roda no seu próprio compose; conecte pela rede externa
+# (SUPABASE_DOCKER_NETWORK) ou pela URL pública.
+services:
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    image: replyflow:latest
+    env_file: .env
+    restart: unless-stopped
+    networks: [web, supabase]
+
+  worker:
+    image: replyflow:latest
+    depends_on: [app]
+    env_file: .env
+    command: ["node", "dist/worker.mjs"]
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    networks: [supabase]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [web]
+
+networks:
+  web: {}
+  supabase:
+    external: true
+    name: ${SUPABASE_DOCKER_NETWORK:-supabase_default}
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
