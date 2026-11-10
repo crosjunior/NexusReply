@@ -114,6 +114,93 @@ export async function addDocumentToKnowledgeBase(formData: FormData): Promise<vo
   revalidatePath("/app/knowledge");
 }
 
+export async function addBatchDocumentsAction(data: {
+  baseId: string;
+  items: Array<{
+    title: string;
+    sourceType: DocumentSourceType;
+    content?: string;
+    url?: string;
+    fileSize?: number;
+  }>;
+}): Promise<{ ok: boolean; count: number; error?: string }> {
+  const { workspaceId } = await requireSession();
+  const db = admin();
+  let successCount = 0;
+
+  for (const item of data.items) {
+    try {
+      let textToParse = (item.content ?? "").trim();
+
+      // Se for URL, raspa o conteúdo da página
+      if (item.sourceType === "url" && item.url) {
+        try {
+          const res = await fetch(item.url, {
+            headers: { "User-Agent": "NexusReply-Crawler/1.0" },
+            signal: AbortSignal.timeout(8000),
+          });
+          const html = await res.text();
+          textToParse = html
+            .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+            .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        } catch (err) {
+          console.error("Falha ao raspar URL:", item.url, err);
+          if (!textToParse) {
+            textToParse = `Link: ${item.url}\n(Conteúdo não pôde ser raspado automaticamente mas o link foi indexado como referência)`;
+          }
+        }
+      }
+
+      if (!textToParse) continue;
+
+      const parsed = parseAndChunkContent(
+        item.title,
+        item.sourceType,
+        textToParse,
+        item.url ? { url: item.url } : {}
+      );
+
+      const { data: doc, error: docErr } = await db
+        .from("knowledge_documents")
+        .insert({
+          workspace_id: workspaceId,
+          knowledge_base_id: data.baseId,
+          title: item.title,
+          source_type: item.sourceType,
+          file_url: item.url ?? null,
+          file_size: item.fileSize || textToParse.length,
+          content_json: parsed.contentJson,
+          chunks_count: parsed.chunks.length,
+          status: "ready",
+        })
+        .select("id")
+        .single();
+
+      if (doc && parsed.chunks.length > 0) {
+        await db.from("knowledge_chunks").insert(
+          parsed.chunks.map((c) => ({
+            workspace_id: workspaceId,
+            knowledge_base_id: data.baseId,
+            document_id: doc.id,
+            content: c.content,
+            metadata: c.metadata,
+          }))
+        );
+        successCount++;
+      }
+    } catch (err) {
+      console.error("Erro ao indexar item:", item.title, err);
+    }
+  }
+
+  revalidatePath(`/app/knowledge/${data.baseId}`);
+  revalidatePath("/app/knowledge");
+  return { ok: true, count: successCount };
+}
+
 export async function deleteKnowledgeBase(id: string) {
   const { workspaceId } = await requireSession();
   const db = admin();

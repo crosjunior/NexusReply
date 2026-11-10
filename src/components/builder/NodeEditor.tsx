@@ -15,6 +15,8 @@ import {
   BookOpen,
   Bot,
   Wand2,
+  Info,
+  ExternalLink,
 } from "lucide-react";
 import { uid } from "@/lib/flow-templates";
 import type {
@@ -32,6 +34,7 @@ import type {
   TriggerType,
 } from "@/lib/engine/types";
 import { NODE_META, TRIGGER_LABEL } from "./nodes";
+import { COMPONENT_DETAILS } from "./component-info";
 import { MediaSelectorModal } from "./MediaSelectorModal";
 
 interface Props {
@@ -46,6 +49,9 @@ const lines = (s: string) => s.split("\n").map((x) => x.trim()).filter(Boolean);
 
 export function NodeEditor({ node, onChange, onDelete, onClose }: Props) {
   const meta = NODE_META[node.type];
+  const details = COMPONENT_DETAILS[node.type];
+  const [showGuide, setShowGuide] = useState(true);
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-zinc-200 px-4 py-3">
@@ -58,6 +64,41 @@ export function NodeEditor({ node, onChange, onDelete, onClose }: Props) {
         </button>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        {/* Guia Didático e Contextual do Componente Selecionado */}
+        {details && (
+          <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-3 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-brand-900 flex items-center gap-1.5">
+                <Info className="h-3.5 w-3.5 text-brand-600" />
+                Como funciona este bloco
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowGuide(!showGuide)}
+                className="text-[11px] font-medium text-brand-700 hover:text-brand-900"
+              >
+                {showGuide ? "Recolher" : "Ver guia"}
+              </button>
+            </div>
+
+            {showGuide && (
+              <div className="space-y-2 pt-1 border-t border-brand-100/70 text-zinc-700">
+                <div>
+                  <span className="font-semibold text-zinc-900 text-[11px] block">🎯 Objetivo:</span>
+                  <p className="text-[11px] text-zinc-600 leading-snug mt-0.5">{details.objective}</p>
+                </div>
+                <div>
+                  <span className="font-semibold text-zinc-900 text-[11px] block">⚙️ O que ele faz:</span>
+                  <p className="text-[11px] text-zinc-600 leading-snug mt-0.5">{details.whatItDoes}</p>
+                </div>
+                <div className="rounded-lg bg-white/90 p-2 border border-brand-100">
+                  <span className="font-semibold text-brand-900 text-[11px] block">💡 Exemplo no contexto:</span>
+                  <p className="text-[11px] text-zinc-700 leading-snug mt-0.5 italic">&quot;{details.contextExample}&quot;</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {node.type === "start" && <StartEditor data={node.data as StartData} onChange={onChange} />}
         {node.type === "message" && <MessageEditor data={node.data as MessageData} onChange={onChange} />}
         {node.type === "input" && <InputEditor data={node.data as InputData} onChange={onChange} />}
@@ -188,11 +229,22 @@ function StartEditor({ data, onChange }: EP<StartData>) {
                         {(t.targetMedia.caption || "Sem legenda").slice(0, 30)}...
                       </p>
                     </div>
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 items-end">
+                      {t.targetMedia.permalink || t.targetMedia.id ? (
+                        <a
+                          href={t.targetMedia.permalink || `https://www.instagram.com/p/${t.targetMedia.id}/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-semibold text-purple-600 hover:text-purple-800 hover:underline flex items-center gap-1"
+                          title="Abrir publicação no Instagram"
+                        >
+                          Ver no Instagram <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => setModalIndex(i)}
-                        className="text-[11px] font-semibold text-purple-600 hover:underline"
+                        className="text-[11px] font-semibold text-zinc-600 hover:underline"
                       >
                         Trocar
                       </button>
@@ -628,7 +680,102 @@ function DelayEditor({ data, onChange }: EP<DelayData>) {
 }
 
 // ---------------------------------------------------------------------
+interface PromptTemplate {
+  id: string;
+  title: string;
+  desc: string;
+  prompt: string;
+  isCustom?: boolean;
+}
+
+const DEFAULT_TEMPLATES: PromptTemplate[] = [
+  {
+    id: "vendas",
+    title: "Vendas & FAQ",
+    desc: "Preços e serviços",
+    prompt: `1. PAPEL E IDENTIDADE:
+Você é o assistente virtual da conta @ocarlossilvajr. Seja simpático, objetivo e profissional.
+
+2. OBJETIVO:
+Tirar dúvidas de clientes sobre nossos serviços, preços, planos e prazos de entrega, sempre incentivando o fechamento.
+
+3. INFORMAÇÕES E REGRAS:
+Use as informações cadastradas na Base de Conhecimento. Nunca invente dados. Se não souber responder, sugira falar com um especialista humano.
+
+4. FORMATO:
+Respostas diretas, em parágrafos curtos (máx. 3 frases por parágrafo), com tom acolhedor e emojis moderados.`,
+  },
+  {
+    id: "qualificacao",
+    title: "Qualificação",
+    desc: "Entender perfil",
+    prompt: `1. PAPEL E IDENTIDADE:
+Você é um consultor estratégico especialista em diagnóstico empresarial da equipe do Carlos Silva Jr.
+
+2. OBJETIVO:
+Fazer perguntas inteligentes para entender o momento, faturamento ou desafios da empresa do cliente e verificar se ele tem fit com nossa consultoria.
+
+3. INFORMAÇÕES E REGRAS:
+Conduza uma conversa fluida fazendo uma pergunta por vez. Apresente nossos diferenciais com base nos documentos da empresa.
+
+4. FORMATO:
+Mensagens objetivas, didáticas e consultivas.`,
+  },
+  {
+    id: "agendamento",
+    title: "Agendamento",
+    desc: "Convidar p/ Meet",
+    prompt: `1. PAPEL E IDENTIDADE:
+Você é responsável pelo agendamento de reuniões estratégicas com a equipe do Carlos Silva Jr.
+
+2. OBJETIVO:
+Responder dúvidas pontuais do cliente e direcioná-lo para escolher um horário na agenda pelo link de reunião online.
+
+3. INFORMAÇÕES E REGRAS:
+Explique como funciona a sessão de alinhamento e passe o link do Google Meet / Teams para confirmação.
+
+4. FORMATO:
+Curto, amigável e convidativo.`,
+  },
+];
+
+const RECOMMENDED_STRUCTURE_BOILERPLATE = `1. PAPEL E IDENTIDADE:
+Você é o assistente virtual de [Nome da Empresa/Pessoa]. Seu tom de voz é acolhedor, consultivo e profissional.
+
+2. OBJETIVO PRINCIPAL:
+[Descreva o objetivo da conversa: ex. tirar dúvidas sobre nossos serviços e convidar para o link de agendamento].
+
+3. INFORMAÇÕES E CONHECIMENTO:
+Responda sempre com base nos documentos e links cadastrados na Base de Conhecimento. Se não encontrar a informação, seja transparente e sugira falar com um especialista humano.
+
+4. FORMATO DAS RESPOSTAS:
+- Seja breve e direto (mensagens de 2 a 4 linhas).
+- Parágrafos curtos e espaçados para leitura fácil no celular.
+- Use emojis com moderação (máx. 1 a 2 por mensagem).
+
+5. REGRAS E LIMITES:
+- Nunca invente preços, descontos ou condições não aprovadas.
+- Se o cliente pedir para falar com um atendente, responda: "Vou avisar nossa equipe agora mesmo para te atender!"`;
+
 function AiEditor({ data, onChange }: EP<AiData>) {
+  const [customTemplates, setCustomTemplates] = useState<PromptTemplate[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("replyflow_custom_prompts");
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [showNewModelModal, setShowNewModelModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [newPromptText, setNewPromptText] = useState("");
+
+  const allTemplates = [...DEFAULT_TEMPLATES, ...customTemplates];
+
   const applyPreset = (prompt: string) => {
     onChange({
       ...data,
@@ -636,6 +783,37 @@ function AiEditor({ data, onChange }: EP<AiData>) {
       conversational: true,
       maxTurns: 5,
     });
+  };
+
+  const handleSaveCustomTemplate = () => {
+    if (!newTitle.trim()) return;
+    const promptToSave = newPromptText.trim() || data.systemPrompt || RECOMMENDED_STRUCTURE_BOILERPLATE;
+    const newTemplate: PromptTemplate = {
+      id: "cust_" + Date.now(),
+      title: newTitle.trim(),
+      desc: newDesc.trim() || "Modelo personalizado",
+      prompt: promptToSave,
+      isCustom: true,
+    };
+    const updated = [...customTemplates, newTemplate];
+    setCustomTemplates(updated);
+    try {
+      localStorage.setItem("replyflow_custom_prompts", JSON.stringify(updated));
+    } catch {}
+    setNewTitle("");
+    setNewDesc("");
+    setNewPromptText("");
+    setShowNewModelModal(false);
+    applyPreset(newTemplate.prompt);
+  };
+
+  const handleDeleteCustomTemplate = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = customTemplates.filter((t) => t.id !== id);
+    setCustomTemplates(updated);
+    try {
+      localStorage.setItem("replyflow_custom_prompts", JSON.stringify(updated));
+    } catch {}
   };
 
   return (
@@ -653,61 +831,242 @@ function AiEditor({ data, onChange }: EP<AiData>) {
 
       {/* Modelos Prontos de Prompt */}
       <div>
-        <label className="text-xs font-bold text-zinc-700 block mb-1.5 flex items-center gap-1">
-          <Wand2 className="h-3.5 w-3.5 text-brand-600" />
-          Modelos Prontos de Instrução:
-        </label>
-        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+            <Wand2 className="h-3.5 w-3.5 text-brand-600" />
+            Modelos Prontos de Instrução:
+          </label>
           <button
             type="button"
-            onClick={() =>
-              applyPreset(
-                "Você é o assistente virtual da conta @ocarlossilvajr. Seja simpático, objetivo e profissional. Responda às dúvidas dos clientes sobre nossos serviços, preços e prazos. Se não souber responder, sugira falar com um especialista humano."
-              )
-            }
-            className="rounded-lg border border-zinc-200 bg-white p-2 text-left hover:border-purple-300 hover:bg-purple-50/20 transition-all text-xs"
+            onClick={() => {
+              setNewPromptText(data.systemPrompt || "");
+              setShowNewModelModal(true);
+            }}
+            className="text-[11px] font-semibold text-brand-600 hover:text-brand-800 flex items-center gap-1 transition-colors"
           >
-            <span className="font-bold block text-zinc-800">Vendas & FAQ</span>
-            <span className="text-[10px] text-zinc-400">Preços e serviços</span>
+            <Plus className="h-3 w-3" />
+            + Novo Modelo
           </button>
+        </div>
 
-          <button
-            type="button"
-            onClick={() =>
-              applyPreset(
-                "Você é um consultor estratégico especialista. Faça perguntas para entender as metas da empresa do cliente e qualifique se ele tem fit com nossa consultoria. Apresente nossos diferenciais de gestão e planejamento."
-              )
-            }
-            className="rounded-lg border border-zinc-200 bg-white p-2 text-left hover:border-purple-300 hover:bg-purple-50/20 transition-all text-xs"
-          >
-            <span className="font-bold block text-zinc-800">Qualificação</span>
-            <span className="text-[10px] text-zinc-400">Entender perfil</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              applyPreset(
-                "Você é responsável pelo agendamento de reuniões estratégicas. Tire dúvidas pontuais do cliente e convide-o para agendar uma reunião de diagnóstico pelo link do Google Meet."
-              )
-            }
-            className="rounded-lg border border-zinc-200 bg-white p-2 text-left hover:border-purple-300 hover:bg-purple-50/20 transition-all text-xs"
-          >
-            <span className="font-bold block text-zinc-800">Agendamento</span>
-            <span className="text-[10px] text-zinc-400">Convidar p/ Meet</span>
-          </button>
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {allTemplates.map((t) => (
+            <div
+              key={t.id}
+              onClick={() => applyPreset(t.prompt)}
+              className="group relative rounded-lg border border-zinc-200 bg-white p-2 text-left hover:border-purple-300 hover:bg-purple-50/20 transition-all text-xs cursor-pointer flex items-start justify-between gap-1"
+            >
+              <div className="min-w-0 flex-1">
+                <span className="font-bold block text-zinc-800 truncate">{t.title}</span>
+                <span className="text-[10px] text-zinc-400 block truncate">{t.desc}</span>
+              </div>
+              {t.isCustom && (
+                <button
+                  type="button"
+                  onClick={(e) => handleDeleteCustomTemplate(t.id, e)}
+                  className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-red-500 p-0.5 transition-opacity"
+                  title="Excluir este modelo personalizado"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
+      {/* Modal / Formulário de Novo Modelo de Instrução */}
+      {showNewModelModal && (
+        <div className="rounded-xl border border-brand-200 bg-brand-50/40 p-3.5 space-y-3 animate-in fade-in-50">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-brand-950 flex items-center gap-1.5">
+              <Plus className="h-3.5 w-3.5 text-brand-600" />
+              Criar Novo Modelo de Instrução
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowNewModelModal(false)}
+              className="text-zinc-400 hover:text-zinc-700 p-0.5"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <div>
+              <label className="text-[11px] font-semibold text-zinc-700 block mb-0.5">Nome do Modelo *</label>
+              <input
+                type="text"
+                placeholder="Ex: Suporte VIP & Garantia"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                className="input w-full text-xs bg-white"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-zinc-700 block mb-0.5">Subtítulo / Objetivo</label>
+              <input
+                type="text"
+                placeholder="Ex: Resolver dúvidas técnicas e trocas"
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+                className="input w-full text-xs bg-white"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-zinc-700 block mb-0.5">Instrução / Prompt</label>
+              <textarea
+                rows={4}
+                placeholder="Digite o texto de instruções deste modelo..."
+                value={newPromptText}
+                onChange={(e) => setNewPromptText(e.target.value)}
+                className="input w-full text-xs font-mono bg-white"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-1 border-t border-brand-100">
+            <button
+              type="button"
+              onClick={() => setShowNewModelModal(false)}
+              className="btn-secondary text-[11px] py-1 px-2.5"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={!newTitle.trim()}
+              onClick={handleSaveCustomTemplate}
+              className="btn-primary text-[11px] py-1 px-3"
+            >
+              Salvar Modelo
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Caixa de Texto de Instruções com Ícone de Ajuda / Melhores Práticas */}
       <div>
-        <label className="label">Instruções, Persona e Regras da IA</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="label mb-0">Instruções, Persona e Regras da IA</label>
+          <button
+            type="button"
+            onClick={() => setShowHelpModal(true)}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-600 hover:text-brand-800 transition-colors"
+            title="Ver melhores práticas de estrutura e formatação de prompts"
+          >
+            <HelpCircle className="h-3.5 w-3.5 text-brand-600" />
+            <span>Melhores Práticas & Estrutura</span>
+          </button>
+        </div>
         <textarea
-          className="input min-h-40 text-xs"
+          className="input min-h-48 text-xs font-mono leading-relaxed"
           value={data.systemPrompt}
           onChange={(e) => onChange({ ...data, systemPrompt: e.target.value })}
-          placeholder="Ex: Você é o assistente do Carlos Silva Jr. Seja amigável e direto. Explique nossos planos, prazos e convide para agendar uma reunião..."
+          placeholder="Ex: 1. PAPEL E IDENTIDADE: Você é o assistente virtual do Carlos Silva Jr..."
         />
       </div>
+
+      {/* Modal Educativo: Melhores Práticas para Criação de Instruções */}
+      {showHelpModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-in fade-in-50">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between border-b border-zinc-100 p-4 sm:px-6 bg-zinc-50/50">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 flex items-center gap-2">
+                  <HelpCircle className="h-5 w-5 text-brand-600" />
+                  Melhores Práticas para Instruções da IA
+                </h3>
+                <p className="text-xs text-zinc-500">
+                  Como estruturar seu prompt para respostas naturais, assertivas e de alta conversão no Direct.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowHelpModal(false)}
+                className="btn-ghost p-1.5 text-zinc-400 hover:text-zinc-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs text-zinc-700">
+              {/* Os 5 Pilares */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3 space-y-1">
+                  <span className="font-bold text-blue-900 block text-xs">1. Papel & Identidade</span>
+                  <p className="text-[11px] text-blue-950/80 leading-relaxed">
+                    Defina quem a IA é (ex: <em>&quot;Sofia, consultora especialista em vendas da empresa X&quot;</em>) e qual o tom de voz (amigável, consultivo, polido).
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 space-y-1">
+                  <span className="font-bold text-emerald-900 block text-xs">2. Objetivo Principal</span>
+                  <p className="text-[11px] text-emerald-950/80 leading-relaxed">
+                    Especifique o resultado esperado: tirar dúvidas de preços, capturar telefone para o CRM ou enviar o link do Google Meet.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-purple-100 bg-purple-50/40 p-3 space-y-1">
+                  <span className="font-bold text-purple-900 block text-xs">3. Base de Conhecimento (RAG)</span>
+                  <p className="text-[11px] text-purple-950/80 leading-relaxed">
+                    Instrua a IA a consultar os documentos indexados no menu lateral e nunca inventar prazos, valores ou dados fora da base.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3 space-y-1">
+                  <span className="font-bold text-amber-900 block text-xs">4. Formato para Instagram / WhatsApp</span>
+                  <p className="text-[11px] text-amber-950/80 leading-relaxed">
+                    Exija parágrafos curtos (1 a 3 linhas), espaçados, linguagem humana e uso comedido de emojis (1 ou 2 por mensagem).
+                  </p>
+                </div>
+              </div>
+
+              {/* Regras e Limites */}
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3.5 space-y-1.5">
+                <span className="font-bold text-zinc-900 block text-xs">5. Regras de Segurança & Transbordo Humano</span>
+                <p className="text-[11px] text-zinc-600 leading-relaxed">
+                  Defina o que a IA <strong>NÃO</strong> deve fazer: nunca prometer descontos sem autorização e, quando o cliente pedir para falar com um humano, transbordar educadamente com a frase de transbordo (ex: <em>&quot;Vou transferir seu atendimento para nossa equipe agora mesmo!&quot;</em>).
+                </p>
+              </div>
+
+              {/* Card de Exemplo de Estrutura */}
+              <div className="rounded-xl border border-brand-200 bg-brand-50/30 p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-brand-900 text-xs">Modelo Estruturado Recomendado:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange({ ...data, systemPrompt: RECOMMENDED_STRUCTURE_BOILERPLATE });
+                      setShowHelpModal(false);
+                    }}
+                    className="btn-primary text-[11px] py-1 px-2.5 flex items-center gap-1 shadow-sm"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Inserir Estrutura no Campo
+                  </button>
+                </div>
+                <pre className="rounded-lg bg-white p-3 font-mono text-[11px] text-zinc-700 whitespace-pre-wrap border border-brand-100 leading-relaxed">
+                  {RECOMMENDED_STRUCTURE_BOILERPLATE}
+                </pre>
+              </div>
+            </div>
+
+            <div className="border-t border-zinc-100 p-4 px-6 flex items-center justify-between bg-zinc-50/50">
+              <span className="text-[11px] text-zinc-400">
+                Você pode criar e salvar seus próprios modelos a qualquer momento no botão &quot;+ Novo Modelo&quot;.
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowHelpModal(false)}
+                className="btn-secondary text-xs"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 space-y-3">
         <label className="flex items-center gap-2 text-xs font-semibold text-zinc-800 cursor-pointer">

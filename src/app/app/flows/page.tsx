@@ -4,7 +4,7 @@ import { TEMPLATES } from "@/lib/flow-templates";
 import { createFlow } from "../actions";
 import { FlowRowActions } from "@/components/FlowRowActions";
 import type { StartData, FlowGraph, MessageData, TriggerConfig } from "@/lib/engine/types";
-import { Film, Image as ImageIcon, Sparkles, Clock, MessageSquare } from "lucide-react";
+import { Film, Image as ImageIcon, Sparkles, Clock, MessageSquare, ExternalLink } from "lucide-react";
 
 const TRIGGER_LABEL: Record<string, string> = {
   comment_keyword: "Comentário",
@@ -99,6 +99,7 @@ export default async function FlowsPage() {
           const triggers = ((start?.data as StartData | undefined)?.triggers ?? []) as TriggerConfig[];
           const primaryTrigger = triggers[0];
           const targetMedia = triggers.find((t) => t.targetMedia)?.targetMedia;
+          const postUrl = targetMedia?.permalink || (targetMedia?.id ? `https://www.instagram.com/p/${targetMedia.id}/` : undefined);
           const schedule = getScheduleBadge(primaryTrigger);
 
           // Primeira mensagem configurada no fluxo
@@ -110,27 +111,52 @@ export default async function FlowsPage() {
               {/* Miniatura da Publicação Alvo (se houver post específico) */}
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 {targetMedia?.thumbnail_url ? (
-                  <div className="relative h-14 w-14 shrink-0 rounded-lg overflow-hidden border border-purple-200 bg-zinc-100 shadow-sm">
-                    <img
-                      src={targetMedia.thumbnail_url}
-                      alt="Capa"
-                      className="h-full w-full object-cover"
-                    />
-                    <span className="absolute bottom-0 inset-x-0 bg-black/70 text-white text-[8px] font-bold text-center uppercase py-0.2">
-                      {targetMedia.media_type}
-                    </span>
-                  </div>
+                  postUrl ? (
+                    <a
+                      href={postUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group relative h-14 w-14 shrink-0 rounded-lg overflow-hidden border border-purple-200 bg-zinc-100 shadow-sm hover:ring-2 hover:ring-purple-400 transition-all block"
+                      title="Abrir publicação no Instagram"
+                    >
+                      <img
+                        src={targetMedia.thumbnail_url}
+                        alt="Capa"
+                        className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      />
+                      <span className="absolute bottom-0 inset-x-0 bg-black/70 text-white text-[8px] font-bold text-center uppercase py-0.2">
+                        {targetMedia.media_type}
+                      </span>
+                      <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <ExternalLink className="h-4 w-4 text-white drop-shadow" />
+                      </div>
+                    </a>
+                  ) : (
+                    <div className="relative h-14 w-14 shrink-0 rounded-lg overflow-hidden border border-purple-200 bg-zinc-100 shadow-sm">
+                      <img
+                        src={targetMedia.thumbnail_url}
+                        alt="Capa"
+                        className="h-full w-full object-cover"
+                      />
+                      <span className="absolute bottom-0 inset-x-0 bg-black/70 text-white text-[8px] font-bold text-center uppercase py-0.2">
+                        {targetMedia.media_type}
+                      </span>
+                    </div>
+                  )
                 ) : (
                   <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-400 border border-zinc-200">
                     <Sparkles className="h-6 w-6 text-purple-400" />
                   </div>
                 )}
 
-                <Link href={`/app/flows/${f.id}`} className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate font-bold text-sm text-zinc-900 hover:text-brand-600 transition-colors">
+                    <Link
+                      href={`/app/flows/${f.id}`}
+                      className="truncate font-bold text-sm text-zinc-900 hover:text-brand-600 transition-colors"
+                    >
                       {f.name}
-                    </span>
+                    </Link>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                         f.status === "published"
@@ -148,9 +174,22 @@ export default async function FlowsPage() {
                   <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
                     {/* Alvo: Post específico ou Qualquer Publicação */}
                     {targetMedia ? (
-                      <span className="rounded bg-purple-50 text-purple-700 border border-purple-100 px-1.5 py-0.5 text-[10px] font-medium" title={targetMedia.caption}>
-                        🎯 Post: {(targetMedia.caption || "ID").slice(0, 30)}...
-                      </span>
+                      postUrl ? (
+                        <a
+                          href={postUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group inline-flex items-center gap-1 rounded bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.5 text-[10px] font-semibold hover:bg-purple-100 hover:text-purple-900 hover:border-purple-300 transition-all shadow-2xs"
+                          title={`Abrir publicação no Instagram: ${targetMedia.caption || ""}`}
+                        >
+                          <span>📸 Post: {(targetMedia.caption || "ID").slice(0, 30)}...</span>
+                          <ExternalLink className="h-2.5 w-2.5 text-purple-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                        </a>
+                      ) : (
+                        <span className="rounded bg-purple-50 text-purple-700 border border-purple-100 px-1.5 py-0.5 text-[10px] font-medium" title={targetMedia.caption}>
+                          📸 Post: {(targetMedia.caption || "ID").slice(0, 30)}...
+                        </span>
+                      )
                     ) : (
                       <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-600">
                         🎯 Qualquer Publicação
@@ -174,12 +213,15 @@ export default async function FlowsPage() {
 
                   {/* Prévia da Mensagem */}
                   {msgPreview && (
-                    <p className="mt-1 text-[11px] text-zinc-400 line-clamp-1 flex items-center gap-1">
+                    <Link
+                      href={`/app/flows/${f.id}`}
+                      className="mt-1 text-[11px] text-zinc-400 hover:text-zinc-600 line-clamp-1 flex items-center gap-1 transition-colors block"
+                    >
                       <MessageSquare className="h-3 w-3 shrink-0" />
                       &quot;{msgPreview}...&quot;
-                    </p>
+                    </Link>
                   )}
-                </Link>
+                </div>
               </div>
 
               {/* Contagem de Execuções */}

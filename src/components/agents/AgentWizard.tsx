@@ -14,8 +14,12 @@ import {
   Shield,
   Layers,
   Check,
+  Plus,
+  Upload,
+  Globe,
+  FileText,
 } from "lucide-react";
-import { createAgentFromWizard } from "@/app/app/agents/actions";
+import { createAgentFromWizard, createQuickKnowledgeBaseAction } from "@/app/app/agents/actions";
 
 interface KnowledgeBaseItem {
   id: string;
@@ -46,6 +50,7 @@ export function AgentWizard({
   const [objectiveDescription, setObjectiveDescription] = useState(
     "Atender com rapidez, tirar dúvidas frequentes com base nos documentos da empresa e direcionar para agendamento de reuniões."
   );
+  const [basesList, setBasesList] = useState<KnowledgeBaseItem[]>(knowledgeBases);
   const [selectedBases, setSelectedBases] = useState<string[]>(knowledgeBases.map((k) => k.id));
   const [channels, setChannels] = useState<string[]>(["instagram", "whatsapp"]);
   const [enableCalendar, setEnableCalendar] = useState(calendars.length > 0);
@@ -53,6 +58,17 @@ export function AgentWizard({
   const [instructions, setInstructions] = useState(
     "Responda de forma ágil, empática e prestativa. Quando o cliente tiver dúvidas de valores ou prazos, consulte a base de conhecimento. Sempre convide para agendar uma reunião ou falar com um consultor humano se necessário."
   );
+
+  // Inline Knowledge Base Creation State
+  const [kbMode, setKbMode] = useState<"select" | "create">("select");
+  const [newKbName, setNewKbName] = useState("");
+  const [newKbCategory, setNewKbCategory] = useState("Comercial");
+  const [newDocTitle, setNewDocTitle] = useState("");
+  const [newSourceType, setNewSourceType] = useState("txt");
+  const [newContent, setNewContent] = useState("");
+  const [newUrl, setNewUrl] = useState("");
+  const [creatingKb, setCreatingKb] = useState(false);
+  const [kbSuccessMsg, setKbSuccessMsg] = useState<string | null>(null);
 
   const toggleBase = (id: string) => {
     setSelectedBases((prev) =>
@@ -91,12 +107,69 @@ export function AgentWizard({
         setError(res.error ?? "Erro ao criar agente.");
       } else {
         router.push("/app/agents");
+        router.refresh();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro desconhecido");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleCreateInlineKb() {
+    if (!newKbName.trim()) {
+      setError("Informe o nome da base de conhecimento.");
+      return;
+    }
+    setCreatingKb(true);
+    setError(null);
+    setKbSuccessMsg(null);
+    try {
+      const res = await createQuickKnowledgeBaseAction({
+        name: newKbName,
+        category: newKbCategory || "Geral",
+        docTitle: newDocTitle || newKbName,
+        sourceType: newSourceType,
+        content: newContent,
+        url: newUrl,
+      });
+
+      if (res.ok && res.base) {
+        setBasesList((prev) => [res.base, ...prev]);
+        setSelectedBases((prev) => [...prev, res.base.id]);
+        setKbSuccessMsg(`Base "${res.base.name}" criada e vinculada com sucesso!`);
+        setNewKbName("");
+        setNewDocTitle("");
+        setNewContent("");
+        setNewUrl("");
+        setKbMode("select");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao criar base de conhecimento.");
+    } finally {
+      setCreatingKb(false);
+    }
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!newDocTitle) setNewDocTitle(file.name);
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (ext === "pdf") setNewSourceType("pdf");
+    else if (ext === "docx" || ext === "doc") setNewSourceType("docx");
+    else if (ext === "xlsx" || ext === "xls") setNewSourceType("xlsx");
+    else if (ext === "csv") setNewSourceType("csv");
+    else setNewSourceType("txt");
+
+    // Ler texto do arquivo
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      setNewContent(text || `Arquivo: ${file.name} (${Math.round(file.size / 1024)} KB)`);
+    };
+    reader.readAsText(file);
   }
 
   return (
@@ -242,54 +315,263 @@ export function AgentWizard({
       {/* Passo 3: Base de Conhecimento */}
       {step === 3 && (
         <div className="card p-6 space-y-5">
-          <div>
-            <h2 className="text-base font-bold text-zinc-900 flex items-center gap-2">
-              <BookOpen className="h-5 w-5 text-brand-600" />
-              Etapa 3: Vincular Bases de Conhecimento
-            </h2>
-            <p className="text-xs text-zinc-500 mt-0.5">
-              Selecione as bases que o agente terá permissão para pesquisar e citar nas respostas.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-zinc-900 flex items-center gap-2">
+                <BookOpen className="h-5 w-5 text-brand-600" />
+                Etapa 3: Vincular Base de Conhecimento
+              </h2>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Selecione bases existentes ou crie uma nova enviando arquivos (PDF, DOCX, TXT, CSV, XLS) ou links.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 bg-zinc-100 p-1 rounded-lg text-xs font-medium self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setKbMode("select")}
+                className={`px-3 py-1.5 rounded-md transition-colors ${
+                  kbMode === "select" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-600 hover:text-zinc-900"
+                }`}
+              >
+                Selecionar Existente ({basesList.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setKbMode("create")}
+                className={`px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${
+                  kbMode === "create" ? "bg-white text-brand-600 shadow-sm font-semibold" : "text-zinc-600 hover:text-zinc-900"
+                }`}
+              >
+                <Plus className="h-3.5 w-3.5" /> Criar Nova Base
+              </button>
+            </div>
           </div>
 
-          {knowledgeBases.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 p-6 text-center text-sm text-zinc-500">
-              Nenhuma base de conhecimento criada ainda.
-              <br />
-              Você poderá adicionar materiais e arquivos na página de Base de Conhecimento a qualquer momento.
+          {kbSuccessMsg && (
+            <div className="rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800 flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-emerald-600" />
+              {kbSuccessMsg}
+            </div>
+          )}
+
+          {kbMode === "select" ? (
+            <div>
+              {basesList.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 p-6 text-center space-y-3">
+                  <p className="text-sm text-zinc-500">Nenhuma base de conhecimento criada ainda no seu workspace.</p>
+                  <button
+                    type="button"
+                    onClick={() => setKbMode("create")}
+                    className="btn-primary text-xs inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Criar Minha Primeira Base Agora
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {basesList.map((kb) => {
+                      const isSelected = selectedBases.includes(kb.id);
+                      return (
+                        <button
+                          key={kb.id}
+                          type="button"
+                          onClick={() => toggleBase(kb.id)}
+                          className={`flex items-start gap-3 rounded-xl border p-4 text-left transition-all ${
+                            isSelected
+                              ? "border-brand-600 bg-brand-50/50 ring-2 ring-brand-500/20"
+                              : "border-zinc-200 bg-white hover:bg-zinc-50"
+                          }`}
+                        >
+                          <div
+                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                              isSelected ? "border-brand-600 bg-brand-600 text-white" : "border-zinc-300"
+                            }`}
+                          >
+                            {isSelected && <Check className="h-3.5 w-3.5" />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-xs text-zinc-900 truncate">{kb.name}</span>
+                              <span className="rounded bg-zinc-100 px-1 text-[10px] text-zinc-600">{kb.category}</span>
+                            </div>
+                            <div className="text-[11px] text-zinc-500 mt-0.5">{kb.docsCount} documento(s) indexado(s)</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => setKbMode("create")}
+                      className="text-xs text-brand-600 hover:underline font-medium inline-flex items-center gap-1"
+                    >
+                      <Plus className="h-3 w-3" /> Adicionar outra base com novos arquivos
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {knowledgeBases.map((kb) => {
-                const isSelected = selectedBases.includes(kb.id);
-                return (
-                  <button
-                    key={kb.id}
-                    type="button"
-                    onClick={() => toggleBase(kb.id)}
-                    className={`flex items-start gap-3 rounded-xl border p-4 text-left transition-all ${
-                      isSelected
-                        ? "border-brand-600 bg-brand-50/50 ring-2 ring-brand-500/20"
-                        : "border-zinc-200 bg-white hover:bg-zinc-50"
-                    }`}
-                  >
-                    <div
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
-                        isSelected ? "border-brand-600 bg-brand-600 text-white" : "border-zinc-300"
-                      }`}
-                    >
-                      {isSelected && <Check className="h-3.5 w-3.5" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-xs text-zinc-900 truncate">{kb.name}</span>
-                        <span className="rounded bg-zinc-100 px-1 text-[10px] text-zinc-600">{kb.category}</span>
-                      </div>
-                      <div className="text-[11px] text-zinc-500 mt-0.5">{kb.docsCount} documentos indexados</div>
-                    </div>
-                  </button>
-                );
-              })}
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-5 space-y-4">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-600">
+                Criar Nova Base de Conhecimento e Anexar Arquivos
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="label">Nome da Nova Base *</label>
+                  <input
+                    type="text"
+                    value={newKbName}
+                    onChange={(e) => setNewKbName(e.target.value)}
+                    placeholder="Ex: Tabela de Preços e Catálogo 2026"
+                    className="input w-full text-xs bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="label">Categoria</label>
+                  <input
+                    type="text"
+                    value={newKbCategory}
+                    onChange={(e) => setNewKbCategory(e.target.value)}
+                    placeholder="Ex: Comercial / Suporte"
+                    className="input w-full text-xs bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Tipo de Conteúdo / Fonte</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { key: "txt", label: "Arquivo Upload", icon: Upload, desc: "PDF, DOCX, TXT, CSV, XLS" },
+                    { key: "manual", label: "Texto / Manual", icon: FileText, desc: "Digite ou cole informações" },
+                    { key: "url", label: "Site / URL", icon: Globe, desc: "Link para raspagem web" },
+                  ].map((src) => {
+                    const active = newSourceType === src.key || (src.key === "txt" && ["pdf", "docx", "xlsx", "csv", "txt"].includes(newSourceType));
+                    const Icon = src.icon;
+                    return (
+                      <button
+                        key={src.key}
+                        type="button"
+                        onClick={() => setNewSourceType(src.key)}
+                        className={`p-3 rounded-lg border text-left transition-colors ${
+                          active ? "border-brand-600 bg-white shadow-sm ring-1 ring-brand-500" : "border-zinc-200 bg-zinc-100 hover:bg-white"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4 text-brand-600 mb-1" />
+                        <div className="text-xs font-semibold text-zinc-900">{src.label}</div>
+                        <div className="text-[10px] text-zinc-500">{src.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {["txt", "pdf", "docx", "xlsx", "csv"].includes(newSourceType) && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="label">Selecione o Arquivo (PDF, DOCX, TXT, CSV, XLSX)</label>
+                    <input
+                      type="file"
+                      accept=".txt,.pdf,.docx,.doc,.xlsx,.xls,.csv,.md"
+                      onChange={handleFileUpload}
+                      className="block w-full text-xs text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 cursor-pointer bg-white border border-zinc-200 rounded-lg p-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Título do Documento</label>
+                    <input
+                      type="text"
+                      value={newDocTitle}
+                      onChange={(e) => setNewDocTitle(e.target.value)}
+                      placeholder="Ex: Tabela de Preços e Serviços.pdf"
+                      className="input w-full text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Conteúdo / Prévia Extraída</label>
+                    <textarea
+                      rows={3}
+                      value={newContent}
+                      onChange={(e) => setNewContent(e.target.value)}
+                      placeholder="Conteúdo que o agente usará..."
+                      className="input w-full text-xs font-mono bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {newSourceType === "manual" && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="label">Título do Documento / FAQ</label>
+                    <input
+                      type="text"
+                      value={newDocTitle}
+                      onChange={(e) => setNewDocTitle(e.target.value)}
+                      placeholder="Ex: Dúvidas Frequentes sobre Prazos e Pagamento"
+                      className="input w-full text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Texto com Informações</label>
+                    <textarea
+                      rows={5}
+                      value={newContent}
+                      onChange={(e) => setNewContent(e.target.value)}
+                      placeholder="Cole aqui as regras de negócio, tabelas, horários de atendimento, políticas de cancelamento..."
+                      className="input w-full text-xs bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {newSourceType === "url" && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="label">URL do Site / Documento Online</label>
+                    <input
+                      type="url"
+                      value={newUrl}
+                      onChange={(e) => setNewUrl(e.target.value)}
+                      placeholder="https://suaempresa.com.br/produtos"
+                      className="input w-full text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Título de Referência</label>
+                    <input
+                      type="text"
+                      value={newDocTitle}
+                      onChange={(e) => setNewDocTitle(e.target.value)}
+                      placeholder="Ex: Página de Produtos do Site"
+                      className="input w-full text-xs bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-200">
+                <button
+                  type="button"
+                  onClick={() => setKbMode("select")}
+                  className="btn-secondary text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={creatingKb || !newKbName.trim()}
+                  onClick={handleCreateInlineKb}
+                  className="btn-primary text-xs flex items-center gap-1.5"
+                >
+                  {creatingKb ? "Processando e Indexando..." : "+ Criar e Vincular à Este Agente"}
+                </button>
+              </div>
             </div>
           )}
         </div>

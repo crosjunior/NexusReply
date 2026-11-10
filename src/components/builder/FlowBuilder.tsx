@@ -17,18 +17,22 @@ import {
   type Edge,
   type Node,
 } from "@xyflow/react";
-import { AlertTriangle, ArrowLeft, FlaskConical, Rocket } from "lucide-react";
+import { AlertTriangle, ArrowLeft, FlaskConical, Rocket, Sliders, Smartphone } from "lucide-react";
 import { makeNode, uid } from "@/lib/flow-templates";
 import { validateGraph } from "@/lib/engine/validate";
 import type { FlowGraph, FlowNode, NodeType } from "@/lib/engine/types";
 import { publishFlow, saveFlow } from "@/app/app/actions";
 import { NODE_META, nodeTypes } from "./nodes";
+import { COMPONENT_DETAILS } from "./component-info";
 import { NodeEditor } from "./NodeEditor";
 import { Simulator } from "./Simulator";
 import { ComponentGuide } from "./ComponentGuide";
+import { QuickFlowForm, type KnowledgeBaseOption, type IgAccountInfo } from "./QuickFlowForm";
 
 interface Props {
   flow: { id: string; name: string; status: string; graph: FlowGraph };
+  knowledgeBases?: KnowledgeBaseOption[];
+  igAccount?: IgAccountInfo | null;
 }
 
 const PALETTE: NodeType[] = ["message", "input", "condition", "action", "delay", "ai"];
@@ -51,7 +55,7 @@ function fromRF(nodes: Node[], edges: Edge[]): FlowGraph {
   };
 }
 
-function Builder({ flow }: Props) {
+function Builder({ flow, knowledgeBases = [], igAccount }: Props) {
   const initial = useMemo(() => toRF(flow.graph), [flow.graph]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
@@ -62,6 +66,7 @@ function Builder({ flow }: Props) {
   const [saveState, setSaveState] = useState<"saved" | "dirty" | "saving" | "error">("saved");
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
   const [publishing, startPublish] = useTransition();
+  const [viewMode, setViewMode] = useState<"form" | "visual">("form");
   const rf = useReactFlow();
   const first = useRef(true);
 
@@ -88,41 +93,30 @@ function Builder({ flow }: Props) {
       setSaveState("saving");
       const r = await saveFlow(flow.id, JSON.parse(graphKey) as FlowGraph, name);
       setSaveState(r.ok ? "saved" : "error");
-    }, 1200);
+    }, 1500);
     return () => clearTimeout(t);
   }, [graphKey, name, flow.id]);
 
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(t);
-  }, [toast]);
-
   const onConnect = useCallback(
-    (c: Connection) =>
-      setEdges((eds) =>
-        addEdge(
-          { ...c, id: uid("e"), type: "smoothstep" },
-          // cada saída aponta para um único próximo passo
-          eds.filter((e) => !(e.source === c.source && (e.sourceHandle ?? "next") === (c.sourceHandle ?? "next"))),
-        ),
-      ),
-    [setEdges],
+    (conn: Connection) => {
+      if (!conn.source || !conn.target) return;
+      const targetInDegree = edges.filter((e) => e.target === conn.target).length;
+      if (targetInDegree >= 1) {
+        setToast({ ok: false, text: "Cada bloco pode receber apenas 1 conexão de entrada." });
+        return;
+      }
+      setEdges((eds) => addEdge({ ...conn, id: uid(), type: "smoothstep" }, eds));
+    },
+    [edges, setEdges],
   );
 
   function addBlock(type: NodeType) {
+    const fresh = makeNode(type, { x: 0, y: 0 });
     const center = rf.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-    const node = makeNode(type, { x: center.x - 128 + Math.random() * 40, y: center.y - 60 + Math.random() * 40 });
-    setNodes((ns) => [...ns, { ...node, data: node.data as unknown as Record<string, unknown> }]);
-    // conecta automaticamente ao bloco selecionado, se a saída "next" estiver livre
-    if (selected) {
-      setEdges((eds) =>
-        eds.some((e) => e.source === selected && (e.sourceHandle ?? "next") === "next")
-          ? eds
-          : [...eds, { id: uid("e"), source: selected, sourceHandle: "next", target: node.id, type: "smoothstep" }],
-      );
-    }
-    setSelected(node.id);
+    fresh.position = { x: Math.round(center.x - 128), y: Math.round(center.y - 60) };
+    const rfNode: Node = { id: fresh.id, type: fresh.type, position: fresh.position, data: fresh.data as unknown as Record<string, unknown> };
+    setNodes((ns) => [...ns, rfNode]);
+    setSelected(fresh.id);
     setPanel("edit");
   }
 
@@ -157,6 +151,41 @@ function Builder({ flow }: Props) {
     });
   }
 
+  // Sincronização e salvamento disparado pelo Modo Formulário Rápido
+  async function handleFormSaveGraph(newGraph: FlowGraph, newName?: string) {
+    if (newName) setName(newName);
+    const rfData = toRF(newGraph);
+    setNodes(rfData.nodes);
+    setEdges(rfData.edges);
+    setSaveState("saving");
+    const r = await saveFlow(flow.id, newGraph, newName || name);
+    setSaveState(r.ok ? "saved" : "error");
+    if (r.ok) {
+      setToast({ ok: true, text: "Fluxo salvo com sucesso!" });
+    } else {
+      setToast({ ok: false, text: r.error ?? "Erro ao salvar" });
+    }
+  }
+
+  async function handleFormPublish() {
+    publish();
+  }
+
+  // Se o usuário estiver no Modo Formulário Rápido, exibe a interface com mockup de celular
+  if (viewMode === "form") {
+    return (
+      <QuickFlowForm
+        flow={{ id: flow.id, name, status, graph }}
+        knowledgeBases={knowledgeBases}
+        igAccount={igAccount}
+        onSaveGraph={handleFormSaveGraph}
+        onPublish={handleFormPublish}
+        onSwitchToVisual={() => setViewMode("visual")}
+        isSaving={saveState === "saving"}
+      />
+    );
+  }
+
   const errors = issues.filter((i) => i.level === "error").length;
   const saveLabel = { saved: "Salvo", dirty: "Alterações…", saving: "Salvando…", error: "Erro ao salvar" }[saveState];
 
@@ -172,6 +201,18 @@ function Builder({ flow }: Props) {
           onChange={(e) => setName(e.target.value)}
           className="min-w-0 flex-1 rounded-md px-2 py-1 font-medium outline-none hover:bg-zinc-100 focus:bg-zinc-100"
         />
+
+        {/* Botão de alternar para o Modo Formulário Rápido */}
+        <button
+          type="button"
+          onClick={() => setViewMode("form")}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/70 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition shadow-sm"
+          title="Alternar para o modo de formulário guiado com simulação de smartphone"
+        >
+          <Smartphone className="h-3.5 w-3.5" />
+          <span>Modo Formulário Rápido</span>
+        </button>
+
         <span className={`hidden text-xs sm:inline ${saveState === "error" ? "text-red-600" : "text-zinc-400"}`}>{saveLabel}</span>
         <span
           className={`hidden rounded-full px-2 py-0.5 text-xs sm:inline ${
@@ -200,12 +241,18 @@ function Builder({ flow }: Props) {
       <div className="flex gap-2 overflow-x-auto border-b border-zinc-200 bg-white px-3 py-2">
         {PALETTE.map((t) => {
           const m = NODE_META[t];
+          const det = COMPONENT_DETAILS[t];
           return (
-            <button key={t} className="btn-secondary shrink-0 py-1.5 text-xs" onClick={() => addBlock(t)}>
+            <button
+              key={t}
+              className="btn-secondary shrink-0 py-1.5 text-xs group relative hover:border-brand-300"
+              onClick={() => addBlock(t)}
+              title={`${m.label}: ${det?.objective || ""}`}
+            >
               <span className={`flex h-5 w-5 items-center justify-center rounded text-white ${m.color}`}>
                 <m.icon className="h-3 w-3" />
               </span>
-              {m.label}
+              <span>{m.label}</span>
             </button>
           );
         })}
@@ -233,21 +280,18 @@ function Builder({ flow }: Props) {
               setPanel("none");
             }}
             fitView
-            fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
-            minZoom={0.2}
-            defaultEdgeOptions={{ type: "smoothstep" }}
-            proOptions={{ hideAttribution: true }}
-            deleteKeyCode={["Delete", "Backspace"]}
           >
-            <Background gap={20} size={1} />
+            <Background gap={16} size={1} />
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable className="!hidden md:!block" />
-            <ComponentGuide nodes={displayNodes} />
+            <MiniMap className="!bottom-4 !right-4 !bg-white/80" nodeStrokeWidth={3} zoomable pannable />
           </ReactFlow>
+
+          {/* Dica / Guia Flutuante no Rodapé do Canvas */}
+          <ComponentGuide nodes={displayNodes} />
         </div>
 
         {panel !== "none" && (
-          <aside className="absolute inset-0 z-10 bg-white md:static md:w-[380px] md:border-l md:border-zinc-200">
+          <aside className="w-96 border-l border-zinc-200 bg-white">
             {panel === "edit" && selectedNode && (
               <NodeEditor
                 key={selectedNode.id}

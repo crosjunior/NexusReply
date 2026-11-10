@@ -15,10 +15,10 @@ import {
   BookOpen,
 } from "lucide-react";
 interface Props {
-  nodes: { type?: string }[];
+  nodes?: { type?: string }[];
 }
 
-export function ComponentGuide({ nodes }: Props) {
+export function ComponentGuide({ nodes = [] }: Props) {
   const [open, setOpen] = useState(false);
 
   // Calcula sugestões contextuais com base nos nós atuais no canvas
@@ -46,6 +46,14 @@ export function ComponentGuide({ nodes }: Props) {
       suggestions.push({
         title: "Segmente com uma Ação de Tag",
         desc: "Adicione o bloco Ação 'Adicionar tag' (ex: lead-qualificado) para organizar seus contatos e disparar automações.",
+        icon: Lightbulb,
+      });
+    }
+
+    if (types.has("input") && types.has("ai")) {
+      suggestions.push({
+        title: "Entenda a ordem: Pergunta ➔ IA",
+        desc: "O robô envia a pergunta no Direct e aguarda a resposta do usuário. A IA conectada na saída só responderá depois que o usuário digitar a resposta no chat.",
         icon: Lightbulb,
       });
     }
@@ -107,6 +115,28 @@ export function ComponentGuide({ nodes }: Props) {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+              {/* Dica Essencial sobre Comentários e Directs */}
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 space-y-2 text-xs text-amber-950">
+                <div className="flex items-center gap-2 font-bold text-sm text-amber-900">
+                  <Lightbulb className="h-4 w-4 text-amber-600" />
+                  Como o Instagram entrega as respostas automáticas:
+                </div>
+                <ul className="list-disc pl-4 space-y-1 text-amber-900/90 leading-relaxed">
+                  <li>
+                    <strong>Onde a resposta chega:</strong> O Instagram entrega a resposta de automação no <strong>Direct (DM)</strong> do usuário que comentou no post (além de publicar um comentário público de aviso como <em>&quot;Te mandei no direct! 📩&quot;</em>).
+                  </li>
+                  <li>
+                    <strong>Aba de Solicitações:</strong> Se a conta de teste nunca conversou com seu perfil antes, a mensagem pode aparecer na aba de <strong>Solicitações de Mensagem (Direct)</strong> do Instagram.
+                  </li>
+                  <li>
+                    <strong>Comportamento do bloco Pergunta:</strong> Quando o primeiro passo é uma <em>Pergunta</em> (ex: <em>&quot;Qual seu nome?&quot;</em>), o bot envia essa pergunta no Direct e <strong>pausa aguardando a resposta</strong>. Se a IA estiver conectada depois, ela só responderá quando o usuário digitar o nome no Direct.
+                  </li>
+                  <li>
+                    <strong>Melhor Prática recomendada:</strong> Para comentários em posts/reels, inicie sempre com uma <strong>Mensagem com Botão</strong> (ex: <em>&quot;Oi! Toque no botão para receber o link&quot;</em>) ou conecte a <strong>IA</strong> logo após o Início para que ela já comece atendendo!
+                  </li>
+                </ul>
+              </div>
+
               {/* Componente Mensagem */}
               <div className="flex items-start gap-3 rounded-xl border border-zinc-100 p-3.5 bg-zinc-50/50">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white font-bold">

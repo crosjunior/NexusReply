@@ -37,6 +37,25 @@ export function validateGraph(graph: FlowGraph): Issue[] {
       if (m.imageUrl)
         issues.push({ nodeId: first.id, level: "warning", message: "Imagem não é enviada no 1º private reply (só texto e botões)." });
     }
+
+    if (hasComment && first?.type === "input") {
+      issues.push({
+        nodeId: first.id,
+        level: "warning",
+        message: "Início conectado a uma Pergunta: O usuário receberá a pergunta no Direct (DM). Os próximos passos (como a IA) só serão ativados após ele responder digitando no Direct.",
+      });
+    }
+
+    if (first?.type === "input") {
+      const nextAfterInput = graph.nodes.find((n) => n.id === graph.edges.find((e) => e.source === first.id && (e.sourceHandle ?? "next") === "next")?.target);
+      if (nextAfterInput?.type === "ai") {
+        issues.push({
+          nodeId: nextAfterInput.id,
+          level: "warning",
+          message: "A IA está após a Pergunta: ela só começará a responder dúvidas depois que o contato digitar a resposta da pergunta no Direct.",
+        });
+      }
+    }
   }
 
   for (const n of graph.nodes) {

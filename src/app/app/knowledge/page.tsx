@@ -1,12 +1,14 @@
 import { requireSession } from "@/lib/supabase/server";
+import { admin } from "@/lib/supabase/admin";
 import { BookOpen, FolderPlus, FileText, ArrowRight, Layers, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { createKnowledgeBase } from "./actions";
 
 export default async function KnowledgeBasesPage() {
-  const { supabase, workspaceId } = await requireSession();
+  const { workspaceId } = await requireSession();
+  const db = admin();
 
-  const { data: bases } = await supabase
+  const { data: bases } = await db
     .from("knowledge_bases")
     .select("id, name, category, description, objective, created_at, knowledge_documents(count)")
     .eq("workspace_id", workspaceId)
