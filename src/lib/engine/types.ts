@@ -21,17 +21,34 @@ export type TriggerType =
 
 export type MatchMode = "contains" | "exact" | "any";
 
+export interface TargetMedia {
+  id: string;
+  media_type: string;
+  media_product_type?: string;
+  media_url?: string;
+  thumbnail_url?: string;
+  caption?: string;
+  timestamp?: string;
+  permalink?: string;
+}
+
 export interface TriggerConfig {
   id: string;
   type: TriggerType;
   keywords: string[];
   match: MatchMode;
-  /** Apenas para comentários: limitar a posts/reels específicos (vazio = todos) */
+  /** Apenas para comentários/DMs: limitar a posts/reels específicos (vazio = todos) */
   mediaIds?: string[];
+  /** Detalhes visuais do post/reels/story selecionado */
+  targetMedia?: TargetMedia;
   /** Respostas públicas ao comentário (uma é sorteada) */
   publicReplies?: string[];
   /** default_reply: não repetir para o mesmo contato dentro de N horas */
   cooldownHours?: number;
+  /** Vigência da regra: permanente ou agendada com início e fim */
+  scheduleType?: "permanent" | "scheduled";
+  startsAt?: string;
+  endsAt?: string;
 }
 
 export interface Button {

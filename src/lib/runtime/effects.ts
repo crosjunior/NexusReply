@@ -3,6 +3,8 @@ import { admin } from "../supabase/admin";
 import { env } from "../env";
 import { IgApiError, replyToComment, sendMessage, toGraphMessage, typingOn } from "../instagram/api";
 import { sendWaMessage, sendWaText, WaApiError } from "../whatsapp/api";
+import { searchKnowledge } from "../knowledge/search";
+import { buildAgentPrompt } from "../ai/agent-service";
 import type { Effect } from "../engine/types";
 import type { IgAccountRow, RunContext, WaAccountRow } from "./types";
 import { generateReply } from "./ai";
@@ -85,15 +87,41 @@ export async function executeEffects(
       try {
         let text: string | undefined;
 
+        if (e.type === "ai_reply") {
+          const history = await loadHistory(ctx.conversation.id);
+          if (e.userText && history.at(-1)?.content !== e.userText) history.push({ role: "user", content: e.userText });
+
+          let prompt = e.systemPrompt;
+          try {
+            const { data: agent } = await db
+              .from("ai_agents")
+              .select("*")
+              .eq("workspace_id", ctx.account.workspace_id)
+              .eq("status", "active")
+              .limit(1)
+              .maybeSingle();
+
+            if (agent) {
+              prompt = await buildAgentPrompt(agent, e.userText || history.at(-1)?.content || "");
+            } else {
+              const res = await searchKnowledge(ctx.account.workspace_id, e.userText || history.at(-1)?.content || "", undefined, 3);
+              if (res.length > 0) {
+                prompt += `\n\n--- BASE DE CONHECIMENTO ---\n` + res.map((r) => r.content).join("\n\n");
+              }
+            }
+          } catch (err) {
+            console.warn("[effects ai_reply] Falha ao enriquecer com agente/base:", err);
+          }
+
+          text = await generateReply({ systemPrompt: prompt, history });
+        }
+
         if (ctx.channel === "whatsapp") {
           const waAcc = ctx.account as WaAccountRow;
           const phone = ctx.contact.phone_number ?? "";
 
           if (e.type === "ai_reply") {
-            const history = await loadHistory(ctx.conversation.id);
-            if (e.userText && history.at(-1)?.content !== e.userText) history.push({ role: "user", content: e.userText });
-            text = await generateReply({ systemPrompt: e.systemPrompt, history });
-            const sent = await sendWaText(ctx.token, waAcc.phone_number_id, phone, text);
+            const sent = await sendWaText(ctx.token, waAcc.phone_number_id, phone, text!);
             await recordOutbound(ctx, {
               mid: sent.messages[0]?.id,
               text,
@@ -116,10 +144,7 @@ export async function executeEffects(
           let message: Record<string, unknown>;
           if (e.type === "ai_reply") {
             if (!viaComment && ctx.contact.igsid) await typingOn(ctx.token, ctx.contact.igsid);
-            const history = await loadHistory(ctx.conversation.id);
-            if (e.userText && history.at(-1)?.content !== e.userText) history.push({ role: "user", content: e.userText });
-            text = await generateReply({ systemPrompt: e.systemPrompt, history });
-            message = { text };
+            message = { text: text! };
           } else {
             message = toGraphMessage(e.message, meta.flowId, e.nodeId);
             text = e.message.text ?? (e.message.imageUrl ? "[imagem]" : undefined);

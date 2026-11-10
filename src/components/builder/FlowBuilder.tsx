@@ -25,6 +25,7 @@ import { publishFlow, saveFlow } from "@/app/app/actions";
 import { NODE_META, nodeTypes } from "./nodes";
 import { NodeEditor } from "./NodeEditor";
 import { Simulator } from "./Simulator";
+import { ComponentGuide } from "./ComponentGuide";
 
 interface Props {
   flow: { id: string; name: string; status: string; graph: FlowGraph };
@@ -241,6 +242,7 @@ function Builder({ flow }: Props) {
             <Background gap={20} size={1} />
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable className="!hidden md:!block" />
+            <ComponentGuide nodes={displayNodes} />
           </ReactFlow>
         </div>
 

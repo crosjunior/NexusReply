@@ -325,6 +325,55 @@ export async function getUserProfile(token: string, igsid: string) {
   }
 }
 
+export interface IgMediaItem {
+  id: string;
+  caption?: string;
+  media_type: "IMAGE" | "VIDEO" | "CAROUSEL_ALBUM";
+  media_product_type?: "FEED" | "REELS" | "STORY" | "AD";
+  media_url?: string;
+  thumbnail_url?: string;
+  permalink?: string;
+  timestamp: string;
+}
+
+/**
+ * Busca todas as publicações (Posts, Reels e Stories) da conta profissional do Instagram.
+ */
+export async function getAccountMedia(token: string, igUserId: string): Promise<IgMediaItem[]> {
+  const version = env.graphVersion || "v21.0";
+  const fields = "id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp";
+  const results: IgMediaItem[] = [];
+
+  // 1. Busca Posts e Reels
+  try {
+    const url = `https://graph.facebook.com/${version}/${igUserId}/media?fields=${fields}&limit=50&access_token=${token}`;
+    const res = await call<{ data?: IgMediaItem[] }>(url);
+    if (res.data) results.push(...res.data);
+  } catch (e) {
+    console.warn("[getAccountMedia] Falha ao buscar posts e reels:", e);
+  }
+
+  // 2. Busca Stories ativos
+  try {
+    const storiesUrl = `https://graph.facebook.com/${version}/${igUserId}/stories?fields=${fields}&access_token=${token}`;
+    const sRes = await call<{ data?: IgMediaItem[] }>(storiesUrl);
+    if (sRes.data) {
+      // Garante que a etiqueta de story venha preenchida
+      const stories = sRes.data.map((st) => ({
+        ...st,
+        media_product_type: "STORY" as const,
+      }));
+      results.push(...stories);
+    }
+  } catch (e) {
+    console.warn("[getAccountMedia] Falha ao buscar stories:", e);
+  }
+
+  // Ordena da mais nova para a mais antiga
+  results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return results;
+}
+
 // ---------------------------------------------------------------------
 // Envio
 // ---------------------------------------------------------------------

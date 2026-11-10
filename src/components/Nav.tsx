@@ -2,32 +2,46 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Inbox, Settings, Users, Workflow } from "lucide-react";
+import { Home, Inbox, Settings, Users, Workflow, BookOpen, Bot, Calendar, ShieldCheck } from "lucide-react";
 
-const items = [
+const baseItems = [
   { href: "/app", label: "Início", icon: Home, exact: true },
   { href: "/app/flows", label: "Fluxos", icon: Workflow },
+  { href: "/app/agents", label: "Agentes IA", icon: Bot },
+  { href: "/app/knowledge", label: "Conhecimento", icon: BookOpen },
   { href: "/app/inbox", label: "Inbox", icon: Inbox },
   { href: "/app/contacts", label: "Contatos", icon: Users },
+  { href: "/app/connections", label: "Conexões", icon: Calendar },
   { href: "/app/settings", label: "Conta", icon: Settings },
 ];
 
-export function Nav({ variant }: { variant: "side" | "bottom" }) {
+export function Nav({ variant, isAdmin }: { variant: "side" | "bottom"; isAdmin?: boolean }) {
   const path = usePathname();
   const active = (href: string, exact?: boolean) => (exact ? path === href : path.startsWith(href));
+
+  const items = isAdmin
+    ? [...baseItems, { href: "/app/admin", label: "Administração", icon: ShieldCheck }]
+    : baseItems;
 
   if (variant === "bottom") {
     // esconde no builder para liberar a tela
     if (/^\/app\/flows\/.+/.test(path)) return null;
+    const mobileItems = [
+      items[0], // Início
+      items[1], // Fluxos
+      items[2], // Agentes IA
+      items[3], // Conhecimento
+      items[4], // Inbox
+    ];
     return (
       <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-zinc-200 bg-white md:hidden">
-        {items.map((i) => (
+        {mobileItems.map((i) => (
           <Link
             key={i.href}
             href={i.href}
-            className={`flex flex-col items-center gap-0.5 py-2 text-[11px] ${active(i.href, i.exact) ? "text-brand-600" : "text-zinc-500"}`}
+            className={`flex flex-col items-center gap-0.5 py-2 text-[10px] ${active(i.href, i.exact) ? "text-brand-600 font-medium" : "text-zinc-500"}`}
           >
-            <i.icon className="h-5 w-5" />
+            <i.icon className="h-4 w-4" />
             {i.label}
           </Link>
         ))}
