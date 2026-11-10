@@ -42,7 +42,10 @@ export async function recordOutbound(
 }
 
 function windowOpen(ctx: RunContext) {
-  return !!ctx.contact.window_expires_at && new Date(ctx.contact.window_expires_at) > new Date();
+  // Se o contato acabou de interagir por clique de botão ou mensagem, ou ainda não teve data registrada,
+  // permitimos o envio e deixamos a Meta validar (se expirado, a Meta retorna erro específico capturado abaixo).
+  if (!ctx.contact.window_expires_at) return true;
+  return new Date(ctx.contact.window_expires_at) > new Date();
 }
 
 /**

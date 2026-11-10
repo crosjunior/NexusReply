@@ -72,7 +72,7 @@ interface RawCommentValue {
 
 export function normalizeWebhook(body: { object?: string; entry?: RawEntry[] }): NormalizedEvent[] {
   const out: NormalizedEvent[] = [];
-  if (body.object !== "instagram") return out;
+  if (body.object !== "instagram" && body.object !== "page") return out;
 
   for (const entry of body.entry ?? []) {
     const igUserId = String(entry.id);
@@ -83,10 +83,10 @@ export function normalizeWebhook(body: { object?: string; entry?: RawEntry[] }):
           kind: "postback",
           igUserId,
           senderId: m.sender.id,
-          mid: m.postback.mid,
+          mid: m.postback.mid || `pb_${m.timestamp || Date.now()}_${m.sender.id}`,
           title: m.postback.title,
           payload: m.postback.payload,
-          timestamp: m.timestamp,
+          timestamp: m.timestamp || Date.now(),
         });
       } else if (m.message && !m.message.is_deleted) {
         const isEcho = !!m.message.is_echo;
@@ -95,20 +95,48 @@ export function normalizeWebhook(body: { object?: string; entry?: RawEntry[] }):
           igUserId,
           // em echo o "sender" é a própria conta; o usuário é o recipient
           senderId: isEcho ? m.recipient.id : m.sender.id,
-          mid: m.message.mid,
+          mid: m.message.mid || `msg_${m.timestamp || Date.now()}_${m.sender.id}`,
           text: m.message.text ?? "",
           quickReplyPayload: m.message.quick_reply?.payload,
           attachments: m.message.attachments,
           storyReply: m.message.reply_to?.story,
           isEcho,
-          timestamp: m.timestamp,
+          timestamp: m.timestamp || Date.now(),
         });
       } else {
-        out.push({ kind: "ignored", igUserId, reason: "read/reaction", timestamp: m.timestamp });
+        out.push({ kind: "ignored", igUserId, reason: "read/reaction", timestamp: m.timestamp || Date.now() });
       }
     }
 
     for (const ch of entry.changes ?? []) {
+      if (ch.field === "messages" && ch.value) {
+        const val = ch.value as unknown as RawMessaging;
+        if (val.postback) {
+          out.push({
+            kind: "postback",
+            igUserId,
+            senderId: val.sender?.id || "",
+            mid: val.postback.mid || `pb_${val.timestamp || Date.now()}_${val.sender?.id}`,
+            title: val.postback.title || "",
+            payload: val.postback.payload || "",
+            timestamp: val.timestamp || Date.now(),
+          });
+        } else if (val.message) {
+          const isEcho = !!val.message.is_echo;
+          out.push({
+            kind: "message",
+            igUserId,
+            senderId: isEcho ? val.recipient?.id : val.sender?.id,
+            mid: val.message.mid || `msg_${val.timestamp || Date.now()}_${val.sender?.id}`,
+            text: val.message.text ?? "",
+            quickReplyPayload: val.message.quick_reply?.payload,
+            attachments: val.message.attachments,
+            isEcho,
+            timestamp: val.timestamp || Date.now(),
+          });
+        }
+      }
+
       if (ch.field !== "comments" && ch.field !== "live_comments") continue;
       const v = ch.value;
       if (!v?.from?.id) continue;
@@ -134,7 +162,7 @@ export function dedupeKey(e: NormalizedEvent): string {
     case "message":
       return `msg:${e.mid}`;
     case "postback":
-      return `pb:${e.mid}`;
+      return `pb:${e.senderId}:${e.mid || e.timestamp}:${e.payload}`;
     case "comment":
       return `cm:${e.commentId}`;
     default:

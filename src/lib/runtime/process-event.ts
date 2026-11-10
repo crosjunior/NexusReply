@@ -43,6 +43,9 @@ export async function processEvent(ev: NormalizedEvent): Promise<"done" | "ignor
       username: ev.kind === "comment" ? ev.fromUsername : undefined,
       opensWindow,
     });
+    if (opensWindow) {
+      contact.window_expires_at = new Date(Date.now() + 24 * 3600_000).toISOString();
+    }
     const conversation = await upsertConversation(account, contact);
     const ctx = contextFor(account, contact, conversation);
 
@@ -69,8 +72,10 @@ export async function processEvent(ev: NormalizedEvent): Promise<"done" | "ignor
 
     // ---- clique em botão / quick reply --------------------------------
     const rawPayload = isPostback ? ev.payload : ev.quickReplyPayload;
+    console.log("[processEvent] Inbound text/payload:", { isPostback, rawPayload, text: ev.kind === "message" ? ev.text : undefined });
     const pb = decodePayload(rawPayload);
     if (pb) {
+      console.log("[processEvent] Decoded payload:", pb);
       const flow = await loadFlow(pb.flowId);
       if (flow && flow.workspace_id === account.workspace_id) {
         const session = await latestSessionForFlow(contact.id, flow.id);

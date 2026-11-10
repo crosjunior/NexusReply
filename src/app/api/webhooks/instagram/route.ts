@@ -32,11 +32,13 @@ export async function POST(req: NextRequest) {
   let body: unknown;
   try {
     body = JSON.parse(raw);
+    console.log("[webhook:instagram] Raw payload:", raw.slice(0, 300));
   } catch {
     return new NextResponse("Bad JSON", { status: 400 });
   }
 
   const events = normalizeWebhook(body as Parameters<typeof normalizeWebhook>[0]).filter((e) => e.kind !== "ignored");
+  console.log(`[webhook:instagram] Normalized ${events.length} valid events:`, events.map((e) => `${e.kind} (${e.igUserId})`));
   if (!events.length) return NextResponse.json({ ok: true });
 
   const rows = events.map((e) => ({
