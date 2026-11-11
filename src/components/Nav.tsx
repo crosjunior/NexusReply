@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Inbox, Settings, Users, Workflow, BookOpen, Bot, Calendar, ShieldCheck } from "lucide-react";
+import { Home, Inbox, Settings, Users, Workflow, BookOpen, Bot, Calendar, ShieldCheck, MessageSquare } from "lucide-react";
 
 const baseItems = [
   { href: "/app", label: "Início", icon: Home, exact: true },
@@ -11,8 +11,8 @@ const baseItems = [
   { href: "/app/knowledge", label: "Conhecimento", icon: BookOpen },
   { href: "/app/inbox", label: "Inbox", icon: Inbox },
   { href: "/app/contacts", label: "Contatos", icon: Users },
-  { href: "/app/connections", label: "Conexões", icon: Calendar },
-  { href: "/app/settings", label: "Conta", icon: Settings },
+  { href: "/app/connections", label: "Canais de Conexão", icon: MessageSquare },
+  { href: "/app/settings", label: "Configurações", icon: Settings },
 ];
 
 export function Nav({ variant, isAdmin }: { variant: "side" | "bottom"; isAdmin?: boolean }) {

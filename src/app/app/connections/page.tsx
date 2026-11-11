@@ -39,9 +39,9 @@ export default async function ConnectionsPage({
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-8">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-900">Hub de Conexões de Canais & Agendas</h1>
+        <h1 className="text-2xl font-bold text-zinc-900">Canais de Conexão</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Gerencie suas conexões de WhatsApp por QR Code (NexusCRM / Evolution), API Oficial da Meta, Instagram Direct e Agendas.
+          Por onde seu negócio fala com o cliente. Conecte números por QR Code ou código de pareamento no estilo rápido do NexusCRM, ou integre com a API Oficial da Meta e Instagram.
         </p>
       </div>
 
@@ -93,11 +93,10 @@ export default async function ConnectionsPage({
         </a>
       </div>
 
-      {/* Conteúdo Aba 1: WhatsApp (QR Code / Evolution API NexusCRM) */}
+      {/* Conteúdo Aba 1: WhatsApp (QR Code & Pareamento NexusCRM) */}
       {activeTab === "whatsapp" && (
         <div className="space-y-6">
           <WhatsappConnectionsManager
-            initialInstances={evoInstances}
             whatsappEnabled={workspace.whatsappEnabled}
           />
         </div>
