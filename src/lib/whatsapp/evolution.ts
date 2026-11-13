@@ -1,13 +1,18 @@
 /**
  * Cliente da Evolution API v2 para integração com WhatsApp via QR Code / Baileys.
- * Conecta-se à instância local no servidor EC2 ou via URL pública.
+ * Conecta-se à instância gerenciada (ex: NexusReplay na https://evol.nexusia.work) ou local.
  */
 
-const EVOLUTION_URL =
-  process.env.EVOLUTION_API_URL ||
-  (process.env.NODE_ENV === "production" ? "http://172.17.0.1:8080" : "https://api.nexusia.work");
+export const DEFAULT_EVOLUTION_URL =
+  process.env.EVOLUTION_API_URL || "https://evol.nexusia.work";
 
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || "NEXUSTEVAH2025";
+export const DEFAULT_EVOLUTION_API_KEY =
+  process.env.EVOLUTION_API_KEY || "1C49E1C072E4-4898-8306-2F3F35289F20";
+
+export const DEFAULT_INSTANCE_NAME = "NexusReplay";
+export const DEFAULT_PHONE_NUMBER = "5534953309898";
+export const DEFAULT_MANAGER_URL =
+  "https://evol.nexusia.work/manager/instance/1fe77663-64a4-412e-b088-06b84486a74c";
 
 export interface EvolutionInstance {
   id: string;
@@ -18,6 +23,7 @@ export interface EvolutionInstance {
   profilePicUrl?: string;
   number?: string;
   token?: string;
+  integration?: string;
   _count?: {
     Message?: number;
     Contact?: number;
@@ -40,12 +46,23 @@ export interface QrCodeResponse {
   count?: number;
 }
 
-async function evoFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  // Tenta conectar no endpoint configurado e faz fallback para localhost:8080 ou api.nexusia.work
+export interface ConnectionStateResponse {
+  instance?: {
+    instanceName: string;
+    state: "open" | "connecting" | "close" | "refused";
+  };
+}
+
+async function evoFetch<T>(
+  endpoint: string,
+  options: RequestInit = {},
+  baseUrl = DEFAULT_EVOLUTION_URL,
+  apiKey = DEFAULT_EVOLUTION_API_KEY
+): Promise<T> {
   const urls = [
-    `${EVOLUTION_URL}${endpoint}`,
+    `${baseUrl.replace(/\/+$/, "")}${endpoint}`,
+    `https://evol.nexusia.work${endpoint}`,
     `http://127.0.0.1:8080${endpoint}`,
-    `https://api.nexusia.work${endpoint}`,
   ];
 
   let lastError: Error | null = null;
@@ -55,11 +72,11 @@ async function evoFetch<T>(endpoint: string, options: RequestInit = {}): Promise
         ...options,
         headers: {
           "Content-Type": "application/json",
-          apikey: EVOLUTION_API_KEY,
+          apikey: apiKey,
           ...(options.headers || {}),
         },
         cache: "no-store",
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(8000),
       });
 
       if (!res.ok) {
@@ -85,28 +102,48 @@ export async function getEvolutionInstances(): Promise<EvolutionInstance[]> {
   }
 }
 
-/** Cria uma nova instância */
-export async function createEvolutionInstance(instanceName: string): Promise<EvolutionInstance> {
+/** Obtém o estado de conexão atual de uma instância */
+export async function getEvolutionConnectionState(
+  instanceName = DEFAULT_INSTANCE_NAME
+): Promise<"open" | "connecting" | "close" | "refused" | "unknown"> {
+  try {
+    const res = await evoFetch<ConnectionStateResponse>(
+      `/instance/connectionState/${encodeURIComponent(instanceName)}`
+    );
+    return res.instance?.state ?? "close";
+  } catch (err) {
+    console.warn(`[Evolution] Estado não acessível para ${instanceName}:`, err);
+    return "close";
+  }
+}
+
+/** Cria uma nova instância no Evolution API */
+export async function createEvolutionInstance(
+  instanceName: string,
+  token = DEFAULT_EVOLUTION_API_KEY
+): Promise<EvolutionInstance> {
   return await evoFetch<EvolutionInstance>("/instance/create", {
     method: "POST",
     body: JSON.stringify({
       instanceName: instanceName.trim(),
-      token: EVOLUTION_API_KEY,
+      token,
       qrcode: true,
       integration: "WHATSAPP-BAILEYS",
     }),
   });
 }
 
-/** Obtém o QR Code para pareamento */
-export async function getEvolutionQrCode(instanceName: string): Promise<QrCodeResponse> {
+/** Obtém o QR Code em base64 para pareamento */
+export async function getEvolutionQrCode(
+  instanceName = DEFAULT_INSTANCE_NAME
+): Promise<QrCodeResponse> {
   return await evoFetch<QrCodeResponse>(`/instance/connect/${encodeURIComponent(instanceName)}`);
 }
 
 /** Solicita código de pareamento numérico de 8 dígitos */
 export async function getEvolutionPairingCode(
-  instanceName: string,
-  phoneNumber: string
+  instanceName = DEFAULT_INSTANCE_NAME,
+  phoneNumber = DEFAULT_PHONE_NUMBER
 ): Promise<PairingCodeResponse> {
   const cleanPhone = phoneNumber.replace(/\D/g, "");
   return await evoFetch<PairingCodeResponse>(
@@ -114,8 +151,34 @@ export async function getEvolutionPairingCode(
   );
 }
 
+/** Configura o Webhook da instância */
+export async function setEvolutionWebhook(
+  instanceName = DEFAULT_INSTANCE_NAME,
+  webhookUrl = "https://app.nexusia.work/api/webhooks/evolution"
+) {
+  return await evoFetch(`/webhook/set/${encodeURIComponent(instanceName)}`, {
+    method: "POST",
+    body: JSON.stringify({
+      webhook: {
+        enabled: true,
+        url: webhookUrl,
+        byEvents: false,
+        base64: false,
+        events: [
+          "MESSAGES_UPSERT",
+          "MESSAGES_UPDATE",
+          "SEND_MESSAGE",
+          "CONNECTION_UPDATE",
+        ],
+      },
+    }),
+  });
+}
+
 /** Desconecta / Realiza Logout da instância */
-export async function logoutEvolutionInstance(instanceName: string): Promise<boolean> {
+export async function logoutEvolutionInstance(
+  instanceName = DEFAULT_INSTANCE_NAME
+): Promise<boolean> {
   try {
     await evoFetch(`/instance/logout/${encodeURIComponent(instanceName)}`, {
       method: "DELETE",
@@ -127,8 +190,25 @@ export async function logoutEvolutionInstance(instanceName: string): Promise<boo
   }
 }
 
+/** Reinicia a instância */
+export async function restartEvolutionInstance(
+  instanceName = DEFAULT_INSTANCE_NAME
+): Promise<boolean> {
+  try {
+    await evoFetch(`/instance/restart/${encodeURIComponent(instanceName)}`, {
+      method: "PUT",
+    });
+    return true;
+  } catch (err) {
+    console.error("[Evolution] Falha ao reiniciar instância:", err);
+    return false;
+  }
+}
+
 /** Deleta a instância */
-export async function deleteEvolutionInstance(instanceName: string): Promise<boolean> {
+export async function deleteEvolutionInstance(
+  instanceName = DEFAULT_INSTANCE_NAME
+): Promise<boolean> {
   try {
     await evoFetch(`/instance/delete/${encodeURIComponent(instanceName)}`, {
       method: "DELETE",
@@ -142,7 +222,7 @@ export async function deleteEvolutionInstance(instanceName: string): Promise<boo
 
 /** Envia mensagem de texto via Evolution API */
 export async function sendEvolutionText(
-  instanceName: string,
+  instanceName = DEFAULT_INSTANCE_NAME,
   number: string,
   text: string
 ): Promise<{ key: { id: string } }> {
@@ -162,4 +242,3 @@ export async function sendEvolutionText(
     }
   );
 }
-

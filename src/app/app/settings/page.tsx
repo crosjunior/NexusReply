@@ -1,28 +1,29 @@
 import { requireSession } from "@/lib/supabase/server";
 import { disconnectAccount } from "../actions";
 import { env } from "@/lib/env";
+import { EvolutionWhatsAppCard } from "@/components/settings/EvolutionWhatsAppCard";
 import { WhatsAppCard } from "@/components/settings/WhatsAppCard";
+import { getEvolutionStatus } from "./evolution-actions";
+import { MessageSquare, Camera } from "lucide-react";
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ connected?: string; error?: string }> }) {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ connected?: string; error?: string }>;
+}) {
   const { connected, error } = await searchParams;
   const { supabase, workspaceId } = await requireSession();
 
-  const [igRes, waRes] = await Promise.all([
+  const [igRes, evoState] = await Promise.all([
     supabase
       .from("ig_accounts")
       .select("id, username, name, profile_picture_url, status, webhook_subscribed, token_expires_at")
       .eq("workspace_id", workspaceId)
       .neq("status", "disconnected"),
-    supabase
-      .from("whatsapp_accounts")
-      .select("id, phone_number_id, waba_id, display_phone_number, name, status")
-      .eq("workspace_id", workspaceId)
-      .neq("status", "disconnected"),
+    getEvolutionStatus(),
   ]);
 
   const accounts = igRes.data ?? [];
-  const waAccounts = waRes.data ?? [];
-
   const igWebhookUrl = `${env.appUrl}/api/webhooks/instagram`;
   const waWebhookUrl = `${env.appUrl}/api/webhooks/whatsapp`;
 
@@ -31,26 +32,22 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">Canais de Conexão</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Gerencie suas contas conectadas da Meta para Instagram e WhatsApp Cloud API.
+          Gerencie suas conexões de atendimento para WhatsApp (Evolution API) e Instagram Direct.
         </p>
       </div>
 
       {connected && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{connected} ✓</p>}
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
 
-      {/* WhatsApp Section */}
-      <WhatsAppCard
-        accounts={waAccounts}
-        webhookUrl={waWebhookUrl}
-        verifyToken={env.waVerifyToken || env.igVerifyToken}
-      />
+      {/* 1. WhatsApp Evolution API (Principal / Rápido Baileys) */}
+      <EvolutionWhatsAppCard initialState={evoState} />
 
-      {/* Instagram Section */}
+      {/* 2. Instagram Direct */}
       <div className="space-y-6 pt-4 border-t border-zinc-200">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100 text-xs font-bold text-purple-700">
-              IG
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600 text-xs font-bold text-white shadow-xs">
+              <Camera className="h-4 w-4" />
             </span>
             Conta do Instagram
           </h2>
@@ -64,12 +61,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <div key={a.id} className="flex items-center gap-3 p-4">
               {a.profile_picture_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={a.profile_picture_url} alt="" className="h-11 w-11 rounded-full object-cover" />
+                <img src={a.profile_picture_url} alt="" className="h-11 w-11 rounded-full object-cover shadow-xs" />
               ) : (
-                <div className="h-11 w-11 rounded-full bg-zinc-200" />
+                <div className="h-11 w-11 rounded-full bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+                  {a.username.slice(0, 2).toUpperCase()}
+                </div>
               )}
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-sm text-zinc-900">@{a.username}</div>
+                <div className="font-semibold text-sm text-zinc-900">@{a.username}</div>
                 <div className="text-xs text-zinc-500">
                   {a.status === "active" ? (
                     <span className="text-emerald-600 font-medium">● Conectada e ativa</span>
@@ -111,6 +110,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </div>
           <p className="text-xs text-zinc-500">Campos a assinar: comments, messages, messaging_postbacks, messaging_seen, messaging_referral.</p>
         </div>
+      </div>
+
+      {/* 3. WhatsApp Oficial (Meta Cloud API com Templates - Avançado) */}
+      <div className="space-y-4 pt-4 border-t border-zinc-200">
+        <WhatsAppCard accounts={[]} webhookUrl={waWebhookUrl} verifyToken={env.waVerifyToken || env.igVerifyToken} />
       </div>
     </div>
   );
